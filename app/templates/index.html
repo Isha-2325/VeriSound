@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Tamper & Splice Spotter | Digital Audio Forensics</title>
+    <link rel="stylesheet" href="/static/css/forensic.css">
+    <style>
+        :root {
+            --bg-body: #080d1a;
+            --bg-card: #0f172a;
+            --bg-card-hover: #1e293b;
+            --border-ui: #1e293b;
+            --accent-blue: #2563eb;
+            --accent-cyan: #38bdf8;
+            --danger-red: #ef4444;
+            --success-green: #10b981;
+            --warning-amber: #f59e0b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .navbar {
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border-ui);
+            padding: 16px 36px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-badge {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            color: white;
+            font-weight: 800;
+            font-size: 16px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            letter-spacing: 1px;
+        }
+
+        .brand-title h1 {
+            font-size: 16px;
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .brand-title p {
+            font-size: 11.5px;
+            color: var(--accent-cyan);
+            margin: 2px 0 0 0;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 32px auto;
+            padding: 0 20px;
+            flex-grow: 1;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Upload Dropzone */
+        .dropzone-card {
+            background: var(--bg-card);
+            border: 2px dashed #334155;
+            border-radius: 12px;
+            padding: 40px 24px;
+            text-align: center;
+            transition: all 0.25s ease;
+            cursor: pointer;
+            margin-bottom: 24px;
+        }
+
+        .dropzone-card:hover, .dropzone-card.dragover {
+            border-color: var(--accent-cyan);
+            background: #111e38;
+        }
+
+        .dropzone-icon {
+            font-size: 42px;
+            margin-bottom: 12px;
+        }
+
+        .dropzone-card h3 {
+            font-size: 18px;
+            margin-bottom: 6px;
+        }
+
+        .dropzone-card p {
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin-bottom: 18px;
+        }
+
+        .demo-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 14px;
+            font-size: 12.5px;
+            color: var(--text-secondary);
+        }
+
+        .demo-btn {
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #334155;
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .demo-btn:hover {
+            background: var(--accent-blue);
+            color: #fff;
+            border-color: var(--accent-blue);
+        }
+
+        /* Progress Card */
+        #progress-card {
+            display: none;
+            background: var(--bg-card);
+            border: 1px solid var(--border-ui);
+            border-radius: 10px;
+            padding: 24px;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 3px solid rgba(56, 189, 248, 0.2);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Results Display */
+        #results-container {
+            display: none;
+        }
+
+        .verdict-banner {
+            padding: 20px 24px;
+            border-radius: 10px;
+            margin-bottom: 24px;
+            border-left: 6px solid;
+            background: var(--bg-card);
+        }
+
+        .verdict-banner.danger {
+            border-left-color: var(--danger-red);
+            background: rgba(239, 68, 68, 0.12);
+        }
+
+        .verdict-banner.warning {
+            border-left-color: var(--warning-amber);
+            background: rgba(245, 158, 11, 0.12);
+        }
+
+        .verdict-banner.success {
+            border-left-color: var(--success-green);
+            background: rgba(16, 185, 129, 0.12);
+        }
+
+        .verdict-title {
+            font-size: 20px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .verdict-summary {
+            font-size: 13.5px;
+            color: #e2e8f0;
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-ui);
+            border-radius: 10px;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .card-header h3 {
+            font-size: 15px;
+            margin: 0;
+        }
+
+        /* Waveform with Pins */
+        .waveform-wrapper {
+            position: relative;
+            background: #090e1a;
+            border: 1px solid var(--border-ui);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 14px;
+        }
+
+        #waveform-canvas {
+            width: 100%;
+            height: 130px;
+            display: block;
+            cursor: pointer;
+        }
+
+        .pins-overlay {
+            position: relative;
+            height: 24px;
+            margin-top: 4px;
+        }
+
+        .pin-marker {
+            position: absolute;
+            transform: translateX(-50%);
+            top: 0;
+            background: var(--danger-red);
+            color: white;
+            font-size: 10px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            transition: transform 0.15s ease;
+        }
+
+        .pin-marker:hover {
+            transform: translateX(-50%) scale(1.15);
+            background: #f87171;
+        }
+
+        .audio-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .time-badge {
+            font-family: monospace;
+            font-size: 13px;
+            color: var(--accent-cyan);
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px;
+        }
+
+        th {
+            text-align: left;
+            padding: 10px 12px;
+            background: rgba(15, 23, 42, 0.6);
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-ui);
+        }
+
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: #cbd5e1;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .badge-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+        .badge-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+        .badge-success { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+
+        .btn {
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 9px 18px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: #334155;
+            color: #f1f5f9;
+        }
+
+        .btn-secondary:hover {
+            background: #475569;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header class="navbar">
+        <div class="nav-brand">
+            <div class="brand-badge">AF</div>
+            <div class="brand-title">
+                <h1>Audio Tamper &amp; Splice Spotter</h1>
+                <p>Digital Audio Forensics &bull; AI-Automated Edit Detection</p>
+            </div>
+        </div>
+        <div>
+            <span style="font-size: 12px; color: #94a3b8;">Lab Integrity: Online</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Upload Card -->
+        <div class="dropzone-card" id="dropzone" onclick="document.getElementById('audio-input').click()">
+            <div class="dropzone-icon">&#x1F399;&#xFE0F;</div>
+            <h3>Drop Audio Recording to Detect Edits &amp; Splices</h3>
+            <p>Upload your own audio recording (.wav, .mp3, .m4a, .flac) or test with the sample library below</p>
+            <input type="file" id="audio-input" accept=".wav,.mp3,.m4a,.flac,.ogg" style="display:none" onchange="handleFileSelect(this.files[0])">
+            <button type="button" class="btn" onclick="event.stopPropagation(); document.getElementById('audio-input').click()">
+                Select Audio File
+            </button>
+        </div>
+
+        <!-- Sample Audio Library Card -->
+        <div class="card" style="margin-top: -8px; margin-bottom: 24px; padding: 18px 24px; background: #0c1427;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="margin: 0; font-size: 13.5px; color: #e2e8f0; display: flex; align-items: center; gap: 8px;">
+                    <span>&#x1F4DA; Forensic Test Audio Library</span>
+                    <span style="font-size: 11px; color: #94a3b8; font-weight: normal;">(3 Spliced &bull; 5 Clean &bull; Click to scan or download)</span>
+                </h4>
+            </div>
+
+            <!-- 3 Spliced Samples -->
+            <div style="margin-bottom: 12px;">
+                <div style="font-size: 11.5px; font-weight: 700; color: #f87171; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    &#x26A0;&#xFE0F; 3 Spliced / Tampered Samples:
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    <button type="button" class="demo-btn" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1);" onclick="loadSample('tampered_speech_redaction')" title="Zero flatline silence redaction at 2.2s">
+                        &#x25B6; 1. Speech Redaction (Silence Cut)
+                    </button>
+                    <a href="/api/sample/tampered_speech_redaction" download class="demo-btn" style="padding: 5px 8px; color: #94a3b8;" title="Download WAV">&#x2B07;&#xFE0F;</a>
+
+                    <button type="button" class="demo-btn" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1);" onclick="loadSample('tampered_two_speakers_spliced')" title="Hard cut joining male and female voices at 2.5s">
+                        &#x25B6; 2. Two Speakers Spliced
+                    </button>
+                    <a href="/api/sample/tampered_two_speakers_spliced" download class="demo-btn" style="padding: 5px 8px; color: #94a3b8;" title="Download WAV">&#x2B07;&#xFE0F;</a>
+
+                    <button type="button" class="demo-btn" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1);" onclick="loadSample('tampered_room_shift')" title="Indoor studio spliced with 18dB outdoor noise at 2.8s">
+                        &#x25B6; 3. Acoustic Room Shift
+                    </button>
+                    <a href="/api/sample/tampered_room_shift" download class="demo-btn" style="padding: 5px 8px; color: #94a3b8;" title="Download WAV">&#x2B07;&#xFE0F;</a>
+                </div>
+            </div>
+
+            <!-- 5 Clean Samples -->
+            <div>
+                <div style="font-size: 11.5px; font-weight: 700; color: #34d399; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    &#x2705; 5 Clean / Authentic Samples:
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    <button type="button" class="demo-btn" style="border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08);" onclick="loadSample('clean_male_speech')">
+                        &#x25B6; 1. Natural Male Speech
+                    </button>
+                    <a href="/api/sample/clean_male_speech" download class="demo-btn" style="padding: 5px 8px; color: #94a3b8;" title="Download WAV">&#x2B07;&#xFE0F;</a>
+
+                    <button type="button" class="demo-btn" style="border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08);" onclick="loadSample('clean_female_speech')">
+                        &#x25B6; 2. Natural Female Speech
+                    </button>
+                    <a href="/api/sample/clean_female_speech" download class="demo-btn" style="padding: 5px 8px; color: #94a3b8;" title="Download WAV">&#x2B07;&#xFE0F;</a>
+
+                    <button type="button" class="demo-btn" style="border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08);" onclick="loadSample('clean_telephone_call')">
+                        &#x25B6; 3. Telephone Call
+                    </button>
+                    <a href="/api/sample/clean_telephone_call" download class="demo-btn" style="padding: 5px 8px; color: #94a3b8;" title="Download WAV">&#x2B07;&#xFE0F;</a>
+
+                    <button type="button" class="demo-btn" style="border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08);" onclick="loadSample('clean_podcast_studio')">
+                        &#x25B6; 4. Podcast Studio
+                    </button>
+                    <a href="/api/sample/clean_podcast_studio" download class="demo-btn" style="padding: 5px 8px; color: #94a3b8;" title="Download WAV">&#x2B07;&#xFE0F;</a>
+
+                    <button type="button" class="demo-btn" style="border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08);" onclick="loadSample('clean_ambient_interview')">
+                        &#x25B6; 5. Ambient Interview
+                    </button>
+                    <a href="/api/sample/clean_ambient_interview" download class="demo-btn" style="padding: 5px 8px; color: #94a3b8;" title="Download WAV">&#x2B07;&#xFE0F;</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Indicator -->
+        <div id="progress-card">
+            <div class="spinner"></div>
+            <h4 id="progress-status" style="margin: 0; font-size: 15px; color: #38bdf8;">Executing AI Forensic Tamper Scan...</h4>
+            <p id="progress-sub" style="font-size: 12.5px; color: #94a3b8; margin-top: 6px;">Analyzing RMS differentials and background acoustic tone...</p>
+        </div>
+
+        <!-- Results View -->
+        <div id="results-container">
+            <!-- Verdict Banner -->
+            <div id="verdict-card" class="verdict-banner">
+                <div class="verdict-title">
+                    <span id="verdict-text">AI FORENSIC VERDICT</span>
+                    <span id="verdict-prob-badge" class="badge">94.2% TAMPER PROBABILITY</span>
+                </div>
+                <div id="verdict-summary" class="verdict-summary">
+                    AI Automated Analysis Summary
+                </div>
+            </div>
+
+            <!-- Waveform & Audio Player -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>Synchronized Waveform &amp; Edit Anomaly Scrubbing</h3>
+                    <div class="time-badge" id="time-display">00:00.00 / 00:00.00</div>
+                </div>
+                <div class="waveform-wrapper">
+                    <canvas id="waveform-canvas"></canvas>
+                    <div id="pins-overlay" class="pins-overlay"></div>
+                </div>
+                <div class="audio-bar">
+                    <button id="play-btn" class="btn btn-secondary" onclick="togglePlayback()">Play Audio</button>
+                    <audio id="audio-player" preload="auto"></audio>
+                    <span style="font-size: 12px; color: #94a3b8;">
+                        Click on the waveform or any red pin above to jump playback to that exact cut.
+                    </span>
+                </div>
+            </div>
+
+            <!-- AI Diagnostic Findings Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>AI-Automated Forensic Findings &amp; Root Cause Analysis</h3>
+                    <span id="findings-count-badge" class="badge badge-danger">0 Anomalies</span>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Category</th>
+                                <th>Severity</th>
+                                <th>AI Diagnostic Finding &amp; Cause</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="findings-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Spectrogram & Evidence Specifications -->
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Visual Proof: STFT Spectrogram</h3>
+                        <span style="font-size: 11.5px; color: #94a3b8;">Frequency Discontinuities</span>
+                    </div>
+                    <div style="background: #090e1a; border-radius: 6px; padding: 6px; text-align: center;">
+                        <img id="spectrogram-img" src="" alt="Forensic Spectrogram" style="max-width: 100%; border-radius: 4px;">
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Cryptographic Chain of Custody &amp; Acoustics</h3>
+                        <span class="badge badge-success">Verified</span>
+                    </div>
+                    <div style="font-size: 12.5px; line-height: 1.8;">
+                        <div><strong style="color: #94a3b8;">File Examined:</strong> <span id="meta-filename" style="color: #fff;"></span></div>
+                        <div><strong style="color: #94a3b8;">SHA-256 Digest:</strong> <span id="meta-sha256" style="font-family: monospace; color: #38bdf8;"></span></div>
+                        <div><strong style="color: #94a3b8;">MD5 Digest:</strong> <span id="meta-md5" style="font-family: monospace;"></span></div>
+                        <div><strong style="color: #94a3b8;">Byte Entropy:</strong> <span id="meta-entropy"></span> / 8.0 bits</div>
+                        <div><strong style="color: #94a3b8;">Sample Rate:</strong> <span id="meta-sr"></span> Hz (<span id="meta-channels"></span> ch)</div>
+                        <div><strong style="color: #94a3b8;">Duration:</strong> <span id="meta-duration"></span> seconds</div>
+                        <div><strong style="color: #94a3b8;">Dynamic Range:</strong> <span id="meta-dr"></span> dBFS</div>
+                    </div>
+                    <div style="margin-top: 18px; display: flex; gap: 10px;">
+                        <button class="btn" onclick="downloadPdfReport()">&#x1F4C4; Download Official PDF Report</button>
+                        <button class="btn btn-secondary" onclick="resetScanner()">Scan Another Audio</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let currentScanData = null;
+        let audioPlayer = document.getElementById('audio-player');
+        let waveformCanvas = document.getElementById('waveform-canvas');
+        let ctx = waveformCanvas ? waveformCanvas.getContext('2d') : null;
+
+        // Drag & Drop handlers
+        const dropzone = document.getElementById('dropzone');
+        ['dragenter', 'dragover'].forEach(name => {
+            dropzone.addEventListener(name, (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+        });
+        ['dragleave', 'drop'].forEach(name => {
+            dropzone.addEventListener(name, (e) => { e.preventDefault(); dropzone.classList.remove('dragover'); });
+        });
+        dropzone.addEventListener('drop', (e) => {
+            if (e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files[0]);
+        });
+
+        async function handleFileSelect(file) {
+            if (!file) return;
+            showLoading(true);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/api/scan', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    renderResults(data);
+                } else {
+                    alert(data.detail || 'Audio scan failed.');
+                }
+            } catch (err) {
+                alert('Network error communicating with analysis engine.');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function loadSample(sampleName) {
+            showLoading(true);
+            try {
+                const audioRes = await fetch(`/api/sample/${sampleName}`);
+                const blob = await audioRes.blob();
+                const file = new File([blob], `${sampleName}.wav`, { type: 'audio/wav' });
+                await handleFileSelect(file);
+            } catch (err) {
+                alert('Failed to load sample');
+                showLoading(false);
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('progress-card').style.display = show ? 'block' : 'none';
+            if (show) {
+                document.getElementById('results-container').style.display = 'none';
+            }
+        }
+
+        function renderResults(data) {
+            currentScanData = data;
+            document.getElementById('results-container').style.display = 'block';
+
+            // Verdict Banner
+            const vCard = document.getElementById('verdict-card');
+            const ai = data.ai_assessment;
+            vCard.className = `verdict-banner ${ai.verdict_badge}`;
+            document.getElementById('verdict-text').innerText = ai.verdict;
+            document.getElementById('verdict-prob-badge').innerText = `${ai.tamper_probability_pct}% TAMPER PROBABILITY`;
+            document.getElementById('verdict-prob-badge').className = `badge badge-${ai.verdict_badge}`;
+            document.getElementById('verdict-summary').innerText = ai.summary_statement;
+
+            // Findings Table
+            const tbody = document.getElementById('findings-tbody');
+            tbody.innerHTML = '';
+            document.getElementById('findings-count-badge').innerText = `${ai.total_anomalies_count} Anomalies Flagged`;
+            document.getElementById('findings-count-badge').className = `badge badge-${ai.verdict_badge}`;
+
+            if (ai.findings.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#34d399; padding:20px;">&check; Clean audio signal: No splice boundaries, zero cuts, or room tone shifts detected.</td></tr>';
+            } else {
+                ai.findings.forEach(f => {
+                    const tr = document.createElement('tr');
+                    const badgeClass = f.severity === 'CRITICAL' ? 'badge-danger' : 'badge-warning';
+                    tr.innerHTML = `
+                        <td style="font-family:monospace; font-weight:bold; color:#38bdf8;">${f.timestamp}</td>
+                        <td><strong>${f.type}</strong></td>
+                        <td><span class="badge ${badgeClass}">${f.severity}</span></td>
+                        <td style="font-size:12px;">${f.ai_diagnosis}</td>
+                        <td>
+                            ${f.timestamp_sec > 0 ? `<button class="demo-btn" onclick="seekTo(${f.timestamp_sec})">&#x25B6; Listen</button>` : '-'}
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // Spectrogram & Metadata
+            document.getElementById('spectrogram-img').src = data.spectrogram_uri;
+            document.getElementById('meta-filename').innerText = data.filename;
+            document.getElementById('meta-sha256').innerText = data.hashes.sha256;
+            document.getElementById('meta-md5').innerText = data.hashes.md5;
+            document.getElementById('meta-entropy').innerText = data.hashes.entropy;
+            document.getElementById('meta-sr').innerText = data.signal_metrics.sample_rate_hz;
+            document.getElementById('meta-channels').innerText = data.signal_metrics.channels;
+            document.getElementById('meta-duration').innerText = data.signal_metrics.duration_seconds;
+            document.getElementById('meta-dr').innerText = data.signal_metrics.dynamic_range_db;
+
+            // Setup audio player & waveform
+            audioPlayer.src = data.audio_url;
+            setupWaveform(data.waveform, data.signal_metrics.duration_seconds, ai.findings);
+
+            // Scroll smoothly to results
+            document.getElementById('results-container').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function setupWaveform(waveData, duration, findings) {
+            const rect = waveformCanvas.getBoundingClientRect();
+            waveformCanvas.width = rect.width * window.devicePixelRatio;
+            waveformCanvas.height = rect.height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+            const width = rect.width;
+            const height = rect.height;
+
+            function draw(progress = 0) {
+                ctx.clearRect(0, 0, width, height);
+                const centerY = height / 2;
+                const len = waveData.min.length;
+                if (!len) return;
+                const step = width / len;
+
+                for (let i = 0; i < len; i++) {
+                    const x = i * step;
+                    const yMin = centerY - (waveData.min[i] || 0) * (height * 0.45);
+                    const yMax = centerY - (waveData.max[i] || 0) * (height * 0.45);
+                    ctx.strokeStyle = (x / width <= progress) ? '#38bdf8' : '#334155';
+                    ctx.lineWidth = Math.max(1, step * 0.85);
+                    ctx.beginPath();
+                    ctx.moveTo(x, yMin);
+                    ctx.lineTo(x, yMax);
+                    ctx.stroke();
+                }
+
+                // Playhead
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(progress * width, 0);
+                ctx.lineTo(progress * width, height);
+                ctx.stroke();
+            }
+
+            draw(0);
+
+            // Render Anomaly Pins overlay
+            const overlay = document.getElementById('pins-overlay');
+            overlay.innerHTML = '';
+            if (duration > 0) {
+                findings.forEach(f => {
+                    if (f.timestamp_sec > 0) {
+                        const pct = (f.timestamp_sec / duration) * 100;
+                        const pin = document.createElement('div');
+                        pin.className = 'pin-marker';
+                        pin.style.left = `${Math.min(98, Math.max(2, pct))}%`;
+                        pin.innerText = `\u26A0 ${f.timestamp}`;
+                        pin.title = `${f.type}: ${f.ai_diagnosis}`;
+                        pin.onclick = () => seekTo(f.timestamp_sec);
+                        overlay.appendChild(pin);
+                    }
+                });
+            }
+
+            audioPlayer.ontimeupdate = () => {
+                const prog = audioPlayer.duration ? (audioPlayer.currentTime / audioPlayer.duration) : 0;
+                draw(prog);
+                document.getElementById('time-display').innerText = `${fmtTime(audioPlayer.currentTime)} / ${fmtTime(audioPlayer.duration || duration)}`;
+            };
+
+            waveformCanvas.onclick = (e) => {
+                const clickX = e.clientX - waveformCanvas.getBoundingClientRect().left;
+                const prog = clickX / width;
+                if (audioPlayer.duration) audioPlayer.currentTime = prog * audioPlayer.duration;
+            };
+        }
+
+        function fmtTime(sec) {
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            const ms = Math.floor((sec % 1) * 100);
+            return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(ms).padStart(2,'0')}`;
+        }
+
+        function togglePlayback() {
+            const btn = document.getElementById('play-btn');
+            if (audioPlayer.paused) {
+                audioPlayer.play();
+                btn.innerText = 'Pause Audio';
+            } else {
+                audioPlayer.pause();
+                btn.innerText = 'Play Audio';
+            }
+        }
+
+        function seekTo(sec) {
+            audioPlayer.currentTime = Math.max(0, sec - 0.2); // Pre-roll 200ms
+            audioPlayer.play();
+            document.getElementById('play-btn').innerText = 'Pause Audio';
+        }
+
+        async function downloadPdfReport() {
+            if (!currentScanData) return;
+            const res = await fetch('/api/export-pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentScanData)
+            });
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Forensic_Report_${currentScanData.filename}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        function resetScanner() {
+            document.getElementById('results-container').style.display = 'none';
+            document.getElementById('audio-input').value = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
