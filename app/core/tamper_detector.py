@@ -3,17 +3,16 @@ import numpy as np
 
 class ForensicTamperDetector:
     """
-    Forensic splice, cut, and edit detection engine.
-    Detects abrupt energy transitions, zero-sample digital muting,
-    zero-crossing anomalies, and background noise floor shifts across segments.
+    Heuristic screening for possible audio edits.
+    Detected signal changes are review candidates, not proof of manipulation.
     """
 
     @classmethod
     def detect_digital_silence_runs(cls, y: np.ndarray, sr: int, min_duration_sec: float = 0.05) -> List[Dict[str, Any]]:
         """
         Detect runs of perfect digital zeros (exact flatline).
-        Real-world microphone recordings always contain thermal and acoustic room noise.
-        Exact zeros indicate artificial redaction, muting, or DAW zeroing.
+        Exact zero samples can be produced by muting, digital silence, or generated audio;
+        they are an indicator to review, not proof of redaction.
         """
         min_samples = int(sr * min_duration_sec)
         zero_runs = []
@@ -40,9 +39,9 @@ class ForensicTamperDetector:
                     "start_sec": start_time,
                     "end_sec": end_time,
                     "duration_sec": duration,
-                    "anomaly_type": "Synthetic Digital Silence (Exact Zeros)",
-                    "severity": "HIGH",
-                    "explanation": f"Detected {duration}s of mathematically flat zero amplitude, impossible in genuine analog/microphone captures."
+                    "anomaly_type": "Exact Digital Silence (Review Candidate)",
+                    "severity": "MEDIUM",
+                    "explanation": f"Detected {duration}s of exact zero-amplitude samples; this can be intentional silence and does not by itself prove editing."
                 })
                 
         return zero_runs
@@ -52,8 +51,8 @@ class ForensicTamperDetector:
         cls, y: np.ndarray, sr: int, frame_ms: float = 25.0, hop_ms: float = 10.0, threshold_sigma: float = 3.5
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
-        Detect abrupt splice cuts using short-time RMS energy differentials.
-        Splices create unnatural step changes in signal amplitude between frames.
+        Flag abrupt short-time RMS level changes as possible splice candidates.
+        Music transients and natural speech dynamics can produce similar changes.
         """
         frame_len = max(64, int(sr * (frame_ms / 1000.0)))
         hop_len = max(32, int(sr * (hop_ms / 1000.0)))
@@ -114,9 +113,8 @@ class ForensicTamperDetector:
     @classmethod
     def analyze_noise_floor_stability(cls, y: np.ndarray, sr: int, segment_sec: float = 2.0) -> List[Dict[str, Any]]:
         """
-        Evaluate acoustic room noise consistency across longer segments.
-        If segments have wildly differing minimum noise floors, the audio was likely
-        compiled from recordings made in different environments or microphone setups.
+        Flag changes in a coarse background-level estimate across longer segments.
+        This measure is sensitive to changing audio content and is not proof of splicing.
         """
         seg_samples = int(sr * segment_sec)
         total_samples = len(y)
@@ -156,8 +154,7 @@ class ForensicTamperDetector:
     @classmethod
     def run_tamper_suite(cls, y: np.ndarray, sr: int) -> Dict[str, Any]:
         """
-        Execute comprehensive tampering analysis combining zero runs,
-        energy discontinuities, and ambient noise shifts.
+        Run heuristic edit-indicator checks; findings require manual review.
         """
         silence_runs = cls.detect_digital_silence_runs(y, sr)
         energy_splices, chart_data = cls.detect_energy_discontinuities(y, sr)
@@ -171,20 +168,17 @@ class ForensicTamperDetector:
         # Sort anomalies chronologically
         all_anomalies.sort(key=lambda x: x.get("timestamp_sec", x.get("start_sec", 0.0)))
 
-        is_tampered = len(all_anomalies) > 0
-        critical_count = sum(1 for a in all_anomalies if a.get("severity") == "CRITICAL")
+        has_strong_indicators = bool(silence_runs) and len(energy_splices) >= 2
 
-        verdict = "INCONCLUSIVE / CLEAN"
-        if critical_count > 0:
-            verdict = "HIGH PROBABILITY OF TAMPERING (Splices Detected)"
+        verdict = "NO STRONG EDIT INDICATORS DETECTED"
+        if has_strong_indicators:
+            verdict = "STRONG EDIT INDICATORS — REVIEW REQUIRED"
         elif len(all_anomalies) > 0:
-            verdict = "POTENTIAL EDITING / ANOMALIES FLAGGED"
-        else:
-            verdict = "NO EDITING ARTIFACTS DETECTED"
+            verdict = "POTENTIAL EDIT INDICATORS — NOT A CONCLUSION"
 
         return {
             "verdict": verdict,
-            "is_tampered": is_tampered,
+            "is_tampered": has_strong_indicators,
             "anomaly_count": len(all_anomalies),
             "anomalies": all_anomalies,
             "chart_data": chart_data

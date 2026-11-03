@@ -25,7 +25,7 @@ def test_scan_tampered_audio_pipeline(client):
     data = r.json()
     assert "ai_assessment" in data
     assert data["ai_assessment"]["is_tampered"] is True
-    assert "TAMPERED" in data["ai_assessment"]["verdict"]
+    assert "STRONG EDIT INDICATORS" in data["ai_assessment"]["verdict"]
     assert data["ai_assessment"]["tamper_probability_pct"] >= 70.0
     assert len(data["ai_assessment"]["findings"]) > 0
 
@@ -46,4 +46,4 @@ def test_scan_pristine_audio_pipeline(client):
     data = r.json()
     assert "ai_assessment" in data
     assert data["ai_assessment"]["is_tampered"] is False
-    assert "AUTHENTIC" in data["ai_assessment"]["verdict"]
+    assert "NO STRONG EDIT INDICATORS" in data["ai_assessment"]["verdict"]

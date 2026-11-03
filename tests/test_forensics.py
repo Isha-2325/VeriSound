@@ -45,7 +45,7 @@ def test_splice_and_tamper_detection():
 
     assert ai_assessment["is_tampered"] is True
     assert ai_assessment["tamper_probability_pct"] >= 70.0
-    assert "TAMPERED" in ai_assessment["verdict"]
+    assert "STRONG EDIT INDICATORS" in ai_assessment["verdict"]
     assert len(ai_assessment["findings"]) > 0
 
 def test_pristine_audio_integrity():
@@ -60,7 +60,33 @@ def test_pristine_audio_integrity():
 
     ai = AIForensicExplainer.generate_assessment(tamper, metadata, sig_metrics, hashes)
     assert ai["is_tampered"] is False
-    assert "AUTHENTIC" in ai["verdict"]
+    assert "NO STRONG EDIT INDICATORS" in ai["verdict"]
+
+def test_isolated_indicators_do_not_claim_tampering():
+    ai = AIForensicExplainer.generate_assessment(
+        tamper_results={
+            "anomalies": [
+                {
+                    "timestamp_sec": 1.0,
+                    "delta_db": 20.0,
+                    "anomaly_type": "Abrupt Energy Discontinuity (Splice Candidate)"
+                },
+                {
+                    "start_sec": 2.0,
+                    "duration_sec": 0.1,
+                    "anomaly_type": "Exact Digital Silence (Review Candidate)"
+                }
+            ]
+        },
+        metadata_results={"tag_info": {"software_footprints": ["audio editor"]}},
+        signal_metrics={},
+        hasher_results={"entropy": 8.0}
+    )
+
+    assert ai["indicator_score_pct"] == 55.0
+    assert ai["is_tampered"] is False
+    assert "NOT A CONCLUSION" in ai["verdict"]
+    assert "probability" not in ai["summary_statement"].lower()
 
 def test_pdf_report_generation(tmp_path):
     out_pdf = tmp_path / "test_tamper_report.pdf"
